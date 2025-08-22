@@ -1,4 +1,4 @@
-# Node modules (installed automatically by Railway/others)
+# Node dependencies
 node_modules/
 
 # Environment variables (never upload secrets)
@@ -10,10 +10,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# OS files
+# Runtime logs
+logs
+*.log
+logs/*.log
+
+# OS-specific files
 .DS_Store
 Thumbs.db
 
-# IDE/editor configs
+# Editor directories and files
 .vscode/
 .idea/
+*.swp
