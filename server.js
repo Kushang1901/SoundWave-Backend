@@ -1,8 +1,8 @@
-
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
+import { DateTime } from "luxon";
 
 dotenv.config();
 
@@ -16,9 +16,7 @@ app.use(express.json());
 
 // MongoDB connection
 mongoose
-  .connect(MONGO_URI, {
-    dbName: "soundwaveDB",
-  })
+  .connect(MONGO_URI, { dbName: "soundwaveDB" })
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
@@ -32,49 +30,65 @@ const userSessionSchema = new mongoose.Schema({
     {
       action: String,
       productId: String,
-      timestamp: { type: Date, default: Date.now },
+      timestampUTC: { type: Date, default: Date.now },
+      timestampIST: String, // human-readable IST timestamp
     },
   ],
-  startedAt: { type: Date, default: Date.now },
-  endedAt: Date,
+  startedAtUTC: { type: Date, default: Date.now },
+  startedAtIST: String,
+  endedAtUTC: Date,
+  endedAtIST: String,
 });
 
 const UserSession = mongoose.model("UserSession", userSessionSchema);
 
-// Routes
+// Root route
 app.get("/", (req, res) => {
-  res.send("✅ SoundWave Backend is running");
+  res.json({ status: "ok", service: "✅ SoundWave Backend is running 🚀" });
 });
 
-// Example: track page visit
-app.post("/track", async (req, res) => {
+// ✅ Log events (frontend calls /log)
+app.post("/log", async (req, res) => {
   try {
-    const { sessionId, productId } = req.body;
+    const { sessionId, userId = "guest", action, productId } = req.body;
+
+    // Format current time in IST
+    const nowUTC = new Date();
+    const nowIST = DateTime.fromJSDate(nowUTC)
+      .setZone("Asia/Kolkata")
+      .toFormat("dd/MM/yyyy, hh:mm:ss a");
 
     let session = await UserSession.findOne({ sessionId });
 
     if (!session) {
       session = new UserSession({
+        userId,
         sessionId,
         userAgent: req.headers["user-agent"],
         ip: req.ip,
         actions: [],
-        startedAt: new Date(),
+        startedAtUTC: nowUTC,
+        startedAtIST: nowIST,
       });
     }
 
+    // Push action
     session.actions.push({
-      action: "visit_page",
+      action,
       productId,
-      timestamp: new Date(),
+      timestampUTC: nowUTC,
+      timestampIST: nowIST,
     });
 
-    session.endedAt = new Date();
+    // Update session end time
+    session.endedAtUTC = nowUTC;
+    session.endedAtIST = nowIST;
+
     await session.save();
 
-    res.json({ message: "Action tracked successfully", session });
+    res.json({ message: "✅ Action tracked successfully", session });
   } catch (err) {
-    console.error("Error tracking action:", err);
+    console.error("❌ Error logging event:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
