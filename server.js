@@ -1,110 +1,85 @@
+
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
+
 const app = express();
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI;
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// ✅ Connect to MongoDB
+// MongoDB connection
 mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch((err) => console.log(err));
+  .connect(MONGO_URI, {
+    dbName: "soundwaveDB",
+  })
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ✅ Session Schema
-const sessionSchema = new mongoose.Schema({
-  userId: String, // guest or logged-in user
-  sessionId: String, // unique per browser session
-  startedAt: { type: Date, default: Date.now },
-  endedAt: Date,
-  durationSeconds: Number,
+// Schema for user tracking
+const userSessionSchema = new mongoose.Schema({
+  userId: { type: String, default: "guest" },
+  sessionId: String,
   userAgent: String,
   ip: String,
   actions: [
     {
-      action: String, // visit_page, search, add_to_cart, etc.
-      productId: String, // optional (like product name or page)
+      action: String,
+      productId: String,
       timestamp: { type: Date, default: Date.now },
     },
   ],
+  startedAt: { type: Date, default: Date.now },
+  endedAt: Date,
 });
 
-const Session = mongoose.model("Session", sessionSchema);
+const UserSession = mongoose.model("UserSession", userSessionSchema);
 
-// ✅ API: Log Action
-app.post("/log", async (req, res) => {
+// Routes
+app.get("/", (req, res) => {
+  res.send("✅ SoundWave Backend is running");
+});
+
+// Example: track page visit
+app.post("/track", async (req, res) => {
   try {
-    let { userId, sessionId, action, productId } = req.body;
+    const { sessionId, productId } = req.body;
 
-    // generate sessionId if missing
-    if (!sessionId) sessionId = uuidv4();
+    let session = await UserSession.findOne({ sessionId });
 
-    // find existing session
-    let session = await Session.findOne({ sessionId });
-
-    // if not found → create new session
     if (!session) {
-      session = new Session({
-        userId: userId || "guest",
+      session = new UserSession({
         sessionId,
         userAgent: req.headers["user-agent"],
         ip: req.ip,
         actions: [],
+        startedAt: new Date(),
       });
     }
 
-    // push new action
-    session.actions.push({ action, productId });
+    session.actions.push({
+      action: "visit_page",
+      productId,
+      timestamp: new Date(),
+    });
 
-    // update endedAt on every event
     session.endedAt = new Date();
-
-    // if user is leaving → compute duration
-    if (action === "session_end") {
-      session.durationSeconds = Math.round(
-        (session.endedAt - session.startedAt) / 1000
-      );
-    }
-
     await session.save();
 
-    res.status(201).send({ message: "Action logged!", sessionId });
+    res.json({ message: "Action tracked successfully", session });
   } catch (err) {
-    console.error("Error logging action:", err);
-    res.status(400).send(err);
+    console.error("Error tracking action:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// ✅ API: View all sessions in UTC (default)
-app.get("/sessions", async (req, res) => {
-  const sessions = await Session.find().sort({ startedAt: -1 });
-  res.send(sessions);
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
-
-// ✅ API: View all sessions in IST (converted)
-app.get("/sessions-local", async (req, res) => {
-  const sessions = await Session.find().sort({ startedAt: -1 }).lean();
-  const fmt = (d) =>
-    d
-      ? new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-      : null;
-
-  const shaped = sessions.map((s) => ({
-    ...s,
-    startedAtIST: fmt(s.startedAt),
-    endedAtIST: fmt(s.endedAt),
-    durationSeconds:
-      s.startedAt && s.endedAt
-        ? Math.round((new Date(s.endedAt) - new Date(s.startedAt)) / 1000)
-        : null,
-  }));
-
-  res.json(shaped);
-});
-
-// ✅ Run Server
-app.listen(5000, () => console.log("Server running on port 5000"));
