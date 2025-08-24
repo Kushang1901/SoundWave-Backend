@@ -2,7 +2,6 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import { DateTime } from "luxon";
 
 dotenv.config();
 
@@ -16,7 +15,9 @@ app.use(express.json());
 
 // MongoDB connection
 mongoose
-  .connect(MONGO_URI, { dbName: "soundwaveDB" })
+  .connect(MONGO_URI, {
+    dbName: "soundwaveDB",
+  })
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
@@ -30,65 +31,47 @@ const userSessionSchema = new mongoose.Schema({
     {
       action: String,
       productId: String,
-      timestampUTC: { type: Date, default: Date.now },
-      timestampIST: String, // human-readable IST timestamp
+      timestamp: { type: Date, default: Date.now },
     },
   ],
-  startedAtUTC: { type: Date, default: Date.now },
-  startedAtIST: String,
-  endedAtUTC: Date,
-  endedAtIST: String,
+  startedAt: { type: Date, default: Date.now },
+  endedAt: Date,
 });
 
 const UserSession = mongoose.model("UserSession", userSessionSchema);
 
-// Root route
+// Routes
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "✅ SoundWave Backend is running 🚀" });
 });
 
-// ✅ Log events (frontend calls /log)
-app.post("/log", async (req, res) => {
+// Track user activity
+app.post("/track", async (req, res) => {
   try {
-    const { sessionId, userId = "guest", action, productId } = req.body;
+    const { sessionId, productId, action, userId } = req.body;
 
-    // Format current time in IST
-    const nowUTC = new Date();
-    const nowIST = DateTime.fromJSDate(nowUTC)
-      .setZone("Asia/Kolkata")
-      .toFormat("dd/MM/yyyy, hh:mm:ss a");
-
-    let session = await UserSession.findOne({ sessionId });
-
-    if (!session) {
-      session = new UserSession({
-        userId,
-        sessionId,
-        userAgent: req.headers["user-agent"],
-        ip: req.ip,
-        actions: [],
-        startedAtUTC: nowUTC,
-        startedAtIST: nowIST,
-      });
-    }
-
-    // Push action
-    session.actions.push({
-      action,
-      productId,
-      timestampUTC: nowUTC,
-      timestampIST: nowIST,
+    // ✅ Always create a new document per visit
+    const session = new UserSession({
+      userId: userId || "guest",
+      sessionId,
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+      actions: [
+        {
+          action: action || "visit_page",
+          productId,
+          timestamp: new Date(),
+        },
+      ],
+      startedAt: new Date(),
+      endedAt: new Date(),
     });
-
-    // Update session end time
-    session.endedAtUTC = nowUTC;
-    session.endedAtIST = nowIST;
 
     await session.save();
 
-    res.json({ message: "✅ Action tracked successfully", session });
+    res.json({ message: "✅ New session created", session });
   } catch (err) {
-    console.error("❌ Error logging event:", err);
+    console.error("❌ Error tracking action:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
