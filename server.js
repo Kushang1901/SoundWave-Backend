@@ -21,7 +21,7 @@ mongoose
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// Schema
+// Schema for user tracking
 const userSessionSchema = new mongoose.Schema({
   userId: { type: String, default: "guest" },
   sessionId: String,
@@ -40,22 +40,22 @@ const userSessionSchema = new mongoose.Schema({
 
 const UserSession = mongoose.model("UserSession", userSessionSchema);
 
-// Routes
+// ✅ Default route
 app.get("/", (req, res) => {
   res.json({ status: "ok", service: "✅ SoundWave Backend is running 🚀" });
 });
 
-// ✅ Track action (append to existing session if active)
+// ✅ Track user actions
 app.post("/track", async (req, res) => {
   try {
-    const { sessionId, productId, action, userId } = req.body;
+    const { userId, sessionId, action, productId } = req.body;
 
     let session = await UserSession.findOne({ sessionId });
 
     if (!session) {
-      // 👉 Create new session only if not exists
+      // ✅ If no session found, create a new one
       session = new UserSession({
-        userId: userId || "guest",
+        userId,
         sessionId,
         userAgent: req.headers["user-agent"],
         ip: req.ip,
@@ -64,24 +64,24 @@ app.post("/track", async (req, res) => {
       });
     }
 
-    // 👉 Add new action into the same session
+    // ✅ Push new action into this session
     session.actions.push({
-      action: action || "visit_page",
+      action,
       productId,
       timestamp: new Date(),
     });
 
-    session.endedAt = new Date(); // keep updating last activity
+    session.endedAt = new Date();
     await session.save();
 
-    res.json({ message: "✅ Action tracked", session });
+    res.json({ message: "Action tracked successfully", session });
   } catch (err) {
     console.error("❌ Error tracking action:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// Start server
+// ✅ Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
