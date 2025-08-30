@@ -10,7 +10,14 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://ka-soundwave.netlify.app", // ✅ allow only your frontend
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // ================== MongoDB Connection ==================
@@ -145,3 +152,4 @@ app.post("/track", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
